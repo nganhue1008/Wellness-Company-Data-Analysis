@@ -1,0 +1,223 @@
+---
+title: "Wellness_Company_Data_Analysis"
+author: "Hue Dang"
+date: "2024-04-07"
+output: word_document
+---
+## Business Introduction
+
+Bellabeat is a leading innovator in the global smart device market, dedicated to empowering women with cutting-edge technology designed to enhance their health and wellness. Founded in 2013 by Urška Sršen and Sando Mur, Bellabeat blends artistic creativity with technological sophistication to create a range of beautifully crafted products that inspire and inform women worldwide.
+
+Bellabeat offers a diverse portfolio of products designed to meet the unique needs of modern women:
+Bellabeat App: Our flagship product, the Bellabeat app, serves as a comprehensive health companion, offering insights into activity, sleep, stress, menstrual cycle, and mindfulness habits. The app connects seamlessly with our line of smart wellness products.
+Leaf: The Leaf wellness tracker, available as a bracelet, necklace, or clip, tracks activity, sleep, and stress levels, empowering women to optimize their health and well-being.
+Time: Combining timeless design with smart technology, the Time wellness watch tracks activity, sleep, and stress, providing users with valuable insights into their daily wellness routines.
+Spring: The Spring water bottle uses smart technology to track hydration levels throughout the day, ensuring optimal hydration for busy women on the go.
+Bellabeat Membership: Our subscription-based membership program offers personalized guidance on nutrition, activity, sleep, health, and beauty, tailored to individual lifestyles and goals.
+
+## Problem Statement 
+Bellabeat aims to expand its market presence and further drive growth in the global smart device industry. To achieve this goal, Bellabeat should leverage consumer data to gain valuable insights into user behavior and preferences. 
+However, Bellabeat faces the challenge of effectively harnessing and interpreting the vast amount of available data to derive actionable insights.
+How can Bellabeat effectively analyze smart device usage data to gain actionable insights into user behavior, preferences, and engagement patterns, and use these insights to inform its marketing strategy and product development efforts to drive growth and enhance user satisfaction?
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+cat("\014") # clears console
+rm(list = ls()) # clears global environment
+try(dev.off(dev.list()["RStudioGD"]), silent = TRUE) # clears plots
+try(p_unload(p_loaded(), character.only = TRUE), silent = TRUE) #
+options(scipen = 100) # disables scientific notion for entire R session
+install.packages("tidyverse")
+install.packages("here")
+install.packages("janitor")
+install.packages("lubridate")
+install.packages("skimr")
+library(tidyverse)
+library(here)
+library(janitor)
+library(lubridate)
+library(skimr)
+library(corrplot)
+```
+## Data Used
+Dataset: https://www.kaggle.com/datasets/arashnic/fitbit
+
+```{r, echo = TRUE}
+getwd()
+setwd("C:/Users/dangn/Downloads/FitBit Fitness/Fitabase Data 4.12.16-5.12.16")
+daily_activity <- read.csv("C:/Users/dangn/Downloads/FitBit Fitness/Fitabase Data 4.12.16-5.12.16/dailyActivity_merged.csv")
+daily_sleep <- read_csv("C:/Users/dangn/Downloads/FitBit Fitness/Fitabase Data 4.12.16-5.12.16/sleepDay_merged.csv")
+weight <- read_csv("C:/Users/dangn/Downloads/FitBit Fitness/Fitabase Data 4.12.16-5.12.16/weightLogInfo_merged.csv")
+hourly_intensity <- read_csv("C:/Users/dangn/Downloads/FitBit Fitness/Fitabase Data 4.12.16-5.12.16/hourlyIntensities_merged.csv")
+hourly_calories <- read_csv("C:/Users/dangn/Downloads/FitBit Fitness/Fitabase Data 4.12.16-5.12.16/hourlyCalories_merged.csv")
+hourly_steps <- read_csv("C:/Users/dangn/Downloads/FitBit Fitness/Fitabase Data 4.12.16-5.12.16/hourlySteps_merged.csv")
+```
+
+```{r, echo = TRUE}
+head(daily_activity)
+head(daily_sleep)
+head(weight)
+head(hourly_intensity)
+head(hourly_calories)
+head(hourly_steps)
+```
+## EDA
+```{r, echo = TRUE}
+#Merge hourly_intensity, hourly_calories,hourly_steps in one single dataset
+
+hourly_activity <- merge(hourly_intensity,hourly_calories,by=c("Id","ActivityHour"))
+hourly_activity <- merge(hourly_activity,hourly_steps,by=c("Id","ActivityHour"))
+```
+
+```{r, echo = TRUE}
+#examined the number of unique participants we had in each dataset.
+n_distinct(daily_activity$Id)
+n_distinct(daily_sleep$Id)
+n_distinct(weight$Id)
+n_distinct(hourly_activity$Id)
+#clean column names
+clean_names(daily_activity)
+clean_names(daily_sleep)
+clean_names(hourly_activity)
+# remove all capital letters.
+daily_activity <- rename_with(daily_activity,tolower)
+daily_sleep <- rename_with(daily_sleep,tolower)
+hourly_activity <- rename_with(hourly_activity,tolower)
+```
+
+```{r, echo = TRUE}
+#check duplicated values in dataset
+sum(duplicated(daily_activity))
+sum(duplicated(daily_sleep))
+sum(duplicated(hourly_activity))
+```
+
+```{r, echo = TRUE}
+#Cleaning the 3 duplicates from daily_sleep
+daily_sleep <- unique(daily_sleep)
+sum(duplicated(daily_sleep))
+```
+
+```{r, echo = TRUE}
+#Convert date & time format
+daily_activity$activitydate <- mdy(daily_activity$activitydate)
+daily_sleep$sleepday <- mdy_hms(daily_sleep$sleepday)
+hourly_activity$activityhour <- mdy_hms(hourly_activity$activityhour)
+```
+
+```{r, echo = TRUE}
+#Add a day_of_week column to daily_activity
+daily_activity$day_of_week <- wday(daily_activity$activitydate)
+```
+
+```{r, echo = TRUE}
+#Add a total_active_hours column to daily_activity
+
+daily_activity$total_active_hours = (daily_activity$fairlyactiveminutes + daily_activity$lightlyactiveminutes + daily_activity$sedentaryminutes + daily_activity$veryactiveminutes)/60
+daily_activity$total_active_hours <- round(daily_activity$total_active_hours,2)
+```
+
+```{r, echo = TRUE}
+#Add a total_hour_in_bed & total_hour_asleep to daily_sleep
+daily_sleep$total_hour_in_bed = round((daily_sleep$totaltimeinbed)/60,2)
+daily_sleep$total_hour_asleep = round((daily_sleep$totalminutesasleep)/60,2)
+```
+
+```{r, echo = TRUE}
+# Converting number of the day_of_week column to name of the day
+
+daily_activity <- daily_activity %>% 
+  mutate(day_of_week = recode(day_of_week
+                              ,"1" = "Sunday"
+                              ,"2" = "Monday"
+                              ,"3" = "Tuesday"
+                              ,"4" = "Wednesday"
+                              ,"5" = "Thursday"
+                              ,"6" = "Friday"
+                              ,"7" = "Saturday"))
+```
+
+```{r, echo = TRUE}
+# Sort days of weeks from Monday to Sunday 
+daily_activity$day_of_week <- ordered(daily_activity$day_of_week, levels=c("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"))
+```
+## Modeling
+
+```{r, echo = TRUE}
+# Correlation between the number of steps and the calories burned by the users
+# Select relevant columns from hourly_activity
+hourly_steps_calories <- daily_activity[, c("id", "totalsteps", "calories")]
+
+# Step 2: Aggregate data to calculate total steps and total calories burned for each user
+user_total_steps_calories <- hourly_steps_calories %>%
+  group_by(id) %>%
+  summarise(total_steps = sum(totalsteps, na.rm = TRUE),
+            total_calories = sum(calories, na.rm = TRUE))
+
+correlation <- cor(user_total_steps_calories$total_steps, user_total_steps_calories$total_calories)
+correlation
+correlation_matrix <- cor(user_total_steps_calories[, c("total_steps", "total_calories")])
+correlation_matrix
+corrplot(correlation_matrix, method = "circle")
+```
+The correlation coefficient between the total number of steps and the total calories burned is approximately 0.5713, indicating a moderate positive correlation between these variables. As the number of steps increases, there tends to be a moderate increase in the number of calories burned.
+There is a relationship between physical activity (measured by steps) and energy expenditure (measured by calories burned), which aligns with common expectations regarding the relationship between exercise and calorie expenditure
+
+```{r, echo=TRUE}
+# correlation between time used in bed and time asleep
+correlation_sleep_bed <- cor(daily_sleep$totalminutesasleep, daily_sleep$totaltimeinbed)
+correlation_matrix_sleep_bed <- cor(daily_sleep[, c("totalminutesasleep", "totaltimeinbed")])
+correlation_matrix_sleep_bed
+
+corrplot(correlation_matrix_sleep_bed, method = "circle")
+
+```
+There is a close relationship between the duration of time spent in bed and the actual time spent asleep, highlighting the importance of sleep duration in the overall sleep quality assessment.
+
+```{r, echo = TRUE}
+# Calculate average total intensity for each activity hour
+average_intensity <- hourly_intensity %>%
+  group_by(ActivityHour) %>%
+  summarise(average_total_intensity = mean(TotalIntensity, na.rm = TRUE))
+```
+
+
+```{r, echo = TRUE}
+# Minutes of moderate activity per day 
+ggplot(data=daily_activity, aes(x=day_of_week, y=fairlyactiveminutes)) + 
+  geom_bar(stat="identity", fill="#fa8072")+
+  labs(title="Fairly Active Minutes by Day", y="Minutes") 
+```
+
+The bar plot visually represents the distribution of fairly active minutes across different days of the week. Each bar represents the average fairly active minutes for a specific day, with the x-axis showing the days of the week and the y-axis indicating the number of minutes of moderate activity.
+
+```{r, echo = TRUE}
+# Total steps by day 
+ggplot(data=daily_activity, aes(x=day_of_week, y=totalsteps)) + 
+  geom_bar(stat="identity", fill="#fa8072")+
+  labs(title="Steps by Day", y="Total Steps") 
+```
+Each bar in the plot represents the total steps taken on a specific day of the week, with the x-axis indicating the days of the week and the y-axis representing the total number of steps. 
+
+## Conclusion
+Based on the distribution of fairly active minutes across different days of the week. There is variability in moderate activity levels throughout the week, with some days exhibiting higher levels of activity than others.
+
+The bar plot illustrates the total number of steps taken per day of the week.It highlights fluctuations in daily step counts, indicating variations in overall physical activity levels throughout the week. This information can be valuable for understanding user behavior and engagement with fitness goals.
+
+The duration of time spent in bed largely corresponds with the actual time spent asleep, meaning the importance of adequate sleep duration in achieving optimal sleep quality and overall well-being.
+
+The number of steps increases, there is a corresponding moderate increase in the number of calories burned, encouraging regular physical activity in supporting calorie expenditure and overall health.
+## Business Recommendation 
+
+Implement behavioral nudges and reminders within the Bellabeat app to encourage users to engage in regular physical activity and prioritize adequate sleep. Utilize push notifications, in-app messages, and alerts to remind users to take breaks for physical activity throughout the day and to maintain consistent sleep schedules. 
+
+Collaborate with healthcare professionals, such as personal trainers, nutritionists, and sleep specialists, to provide expert guidance and support to Bellabeat users. Integrate features within the app that allow users to connect with certified professionals for personalized advice and coaching on physical activity, nutrition, and sleep hygiene. 
+
+Create virtual challenges where users can compete with friends or other Bellabeat users to reach step milestones or improve sleep quality. 
+
+
+
+
+
+
+
